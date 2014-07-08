@@ -104,6 +104,7 @@ data JsonInfo :: [*] -> * where
   JsonRecord :: SingI xs => Tag -> NP (K String) xs -> JsonInfo xs
 
 jsonInfoFor :: forall xs. JsonOptions -> DatatypeName -> (ConstructorName -> Tag) -> ConstructorInfo xs -> JsonInfo xs
+jsonInfoFor _    _ tag (Infix n _ _)   = JsonMultiple (tag n)
 jsonInfoFor _    _ tag (Constructor n) =
   case shape :: Shape xs of
     ShapeNil           -> JsonZero     n
