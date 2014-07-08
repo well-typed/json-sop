@@ -1,6 +1,11 @@
 name:                json-sop
 version:             0.1.0.0
 synopsis:            Generics JSON (de)serialization using generics-sop
+description:
+  This library contains generic serialization and deserialization functions
+  implemented using the @<https://hackage.haskell.org/generics-sop generics-sop>@
+  package for use with @<http://hackage.haskell.org/aeson aeson>@.
+  .
 license:             BSD3
 license-file:        LICENSE
 author:              Edsko de Vries <edsko@well-typed.com>, Andres Löh <andres@well-typed.com>
@@ -10,6 +15,9 @@ build-type:          Simple
 cabal-version:       >=1.10
 tested-with:         GHC == 7.6.3, GHC == 7.8.2
 
+source-repository head
+  type:                git
+  location:            https://github.com/well-typed/json-sop
 
 library
   exposed-modules:     Generics.SOP.JSON
