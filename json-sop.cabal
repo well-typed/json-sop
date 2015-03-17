@@ -1,5 +1,5 @@
 name:                json-sop
-version:             0.1.0.3
+version:             0.1.0.4
 synopsis:            Generics JSON (de)serialization using generics-sop
 description:
   This library contains generic serialization and deserialization functions
@@ -58,5 +58,3 @@ library
   other-extensions:    OverloadedStrings
                        OverlappingInstances
                        PolyKinds
-                       UndecidableInstances
-                       CPP
