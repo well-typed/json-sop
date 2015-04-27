@@ -134,8 +134,8 @@ jsonInfo pa opts =
 gtoJSON :: forall a. (Generic a, HasDatatypeInfo a, All2 ToJSON (Code a))
         => JsonOptions -> a -> Value
 gtoJSON opts a =
-  unI . hcollapse $ hcliftA2' pt gtoJSON' (jsonInfo (Proxy :: Proxy a) opts)
-                                          (unSOP $ from a)
+  hcollapse $ hcliftA2' pt gtoJSON' (jsonInfo (Proxy :: Proxy a) opts)
+                                    (unSOP $ from a)
 
 gtoJSON' :: (All ToJSON xs, SingI xs) => JsonInfo xs -> NP I xs -> K Value xs
 gtoJSON' (JsonZero n) Nil =
