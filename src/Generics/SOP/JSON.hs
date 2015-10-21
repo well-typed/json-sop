@@ -1,4 +1,7 @@
-{-# LANGUAGE PolyKinds, OverlappingInstances #-}
+{-# LANGUAGE PolyKinds #-}
+#if __GLASGOW_HASKELL__ < 710
+{-# LANGUAGE OverlappingInstances #-}
+#endif
 module Generics.SOP.JSON (
     -- * Configuration
     JsonFieldName
@@ -96,12 +99,12 @@ data JsonInfo :: [*] -> * where
   -- Multiple argument constructor, but not a record
   --
   -- We output the arguments as a JSON array
-  JsonMultiple :: SingI xs => Tag -> JsonInfo xs
+  JsonMultiple :: SListI xs => Tag -> JsonInfo xs
 
   -- Record constructor
   --
   -- We output the arguments as a JSON object (even if there is only one field)
-  JsonRecord :: SingI xs => Tag -> NP (K String) xs -> JsonInfo xs
+  JsonRecord :: SListI xs => Tag -> NP (K String) xs -> JsonInfo xs
 
 jsonInfoFor :: forall xs. JsonOptions -> DatatypeName -> (ConstructorName -> Tag) -> ConstructorInfo xs -> JsonInfo xs
 jsonInfoFor _    _ tag (Infix n _ _)   = JsonMultiple (tag n)
@@ -116,7 +119,7 @@ jsonInfoFor opts d tag (Record n fields) =
     fieldName :: FieldInfo a -> K String a
     fieldName (FieldInfo name) = K (jsonFieldName opts d name)
 
-jsonInfo :: forall a. (HasDatatypeInfo a, SingI (Code a))
+jsonInfo :: forall a. (HasDatatypeInfo a, SListI (Code a))
          => Proxy a -> JsonOptions -> NP JsonInfo (Code a)
 jsonInfo pa opts =
   case datatypeInfo pa of
@@ -134,10 +137,10 @@ jsonInfo pa opts =
 gtoJSON :: forall a. (Generic a, HasDatatypeInfo a, All2 ToJSON (Code a))
         => JsonOptions -> a -> Value
 gtoJSON opts a =
-  hcollapse $ hcliftA2' pt gtoJSON' (jsonInfo (Proxy :: Proxy a) opts)
-                                    (unSOP $ from a)
+  hcollapse $ hcliftA2 allpt gtoJSON' (jsonInfo (Proxy :: Proxy a) opts)
+                                      (unSOP $ from a)
 
-gtoJSON' :: (All ToJSON xs, SingI xs) => JsonInfo xs -> NP I xs -> K Value xs
+gtoJSON' :: All ToJSON xs => JsonInfo xs -> NP I xs -> K Value xs
 gtoJSON' (JsonZero n) Nil =
     K $ String (Text.pack n)
 gtoJSON' (JsonOne tag) (I a :* Nil) =
@@ -176,12 +179,12 @@ gparseJSON :: forall a. (Generic a, HasDatatypeInfo a, All2 FromJSON (Code a))
            => JsonOptions -> Value -> Parser a
 gparseJSON opts v = to `liftM` gparseJSON' v (jsonInfo (Proxy :: Proxy a) opts)
 
-gparseJSON' :: forall (xss :: [[*]]). (All2 FromJSON xss, SingI xss)
+gparseJSON' :: forall (xss :: [[*]]). All2 FromJSON xss
    => Value -> NP JsonInfo xss -> Parser (SOP I xss)
 gparseJSON' v info = runPartial failWith
                    . msum
                    . hcollapse
-                   $ hcliftA2' pf (parseConstructor v) info injs
+                   $ hcliftA2 allpf (parseConstructor v) info injs
   where
     failWith :: [String] -> Parser (SOP I xss)
     failWith []   = fail $ "Unknown error"
@@ -191,7 +194,7 @@ gparseJSON' v info = runPartial failWith
     injs :: NP (Injection (NP I) xss) xss
     injs = injections
 
-parseConstructor :: forall (xss :: [[*]]) (xs :: [*]). (All FromJSON xs, SingI xs)
+parseConstructor :: forall (xss :: [[*]]) (xs :: [*]). All FromJSON xs
                  => Value -> JsonInfo xs -> Injection (NP I) xss xs -> K (Partial Parser (SOP I xss)) xs
 parseConstructor v info (Fn inj) = K $ do
     vals <- parseValues info v
@@ -205,7 +208,7 @@ parseConstructor v info (Fn inj) = K $ do
 -- | Given information about a constructor, check if the given value has the
 -- right shape, and if so, return a product of (still encoded) values for
 -- each of the arguments of the constructor
-parseValues :: forall (xs :: [*]). SingI xs
+parseValues :: forall (xs :: [*]). SListI xs
             => JsonInfo xs -> Value -> Partial Parser (NP (K (Maybe String, Value)) xs)
 parseValues (JsonZero n) =
   withText ("Expected literal " ++ show n) $ \txt -> do
@@ -272,8 +275,16 @@ replaceWithJSON v = parseJSON v >>= \new -> return $ \_old -> new
 parseWith :: UpdateFromJSON a => a -> Value -> Parser a
 parseWith a = liftM ($ a) . updateFromJSON
 
-instance FromJSON a => UpdateFromJSON [a]       where updateFromJSON = replaceWithJSON
-instance FromJSON a => UpdateFromJSON (Maybe a) where updateFromJSON = replaceWithJSON
+instance
+#if __GLASGOW_HASKELL__ >= 710
+  {-# OVERLAPPABLE #-}
+#endif
+  FromJSON a => UpdateFromJSON [a]       where updateFromJSON = replaceWithJSON
+instance
+#if __GLASGOW_HASKELL__ >= 710
+  {-# OVERLAPPABLE #-}
+#endif
+  FromJSON a => UpdateFromJSON (Maybe a) where updateFromJSON = replaceWithJSON
 
 -- Primitive types we can only replace whole
 instance UpdateFromJSON Int      where updateFromJSON = replaceWithJSON
@@ -281,7 +292,11 @@ instance UpdateFromJSON Double   where updateFromJSON = replaceWithJSON
 instance UpdateFromJSON Rational where updateFromJSON = replaceWithJSON
 instance UpdateFromJSON Bool     where updateFromJSON = replaceWithJSON
 instance UpdateFromJSON Text     where updateFromJSON = replaceWithJSON
-instance UpdateFromJSON String   where updateFromJSON = replaceWithJSON
+instance
+#if __GLASGOW_HASKELL__ >= 710
+  {-# OVERLAPPING #-}
+#endif
+  UpdateFromJSON String   where updateFromJSON = replaceWithJSON
 
 {-------------------------------------------------------------------------------
   Generic instance for UpdateFromJSON
@@ -297,7 +312,7 @@ gupdateFromJSON opts v = do
     _ :* Nil -> error "cannot update non-record type"
     _        -> error "inaccessible"
 
-gupdateRecord :: forall (xs :: [*]) (a :: *). (All UpdateFromJSON xs, SingI xs)
+gupdateRecord :: forall (xs :: [*]) (a :: *). All UpdateFromJSON xs
               => NP (K String) xs -> NP (GLens (->) (->) a) xs -> Value -> Parser (a -> a)
 gupdateRecord fields lenses = withObject "Object" $ \obj -> do
     values :: NP (K (Maybe Value)) xs <- lineup fields obj
@@ -357,8 +372,14 @@ tagValue (Tag t) v = K $ Object $ HashMap.fromList [(Text.pack t, v)]
 pt :: Proxy ToJSON
 pt = Proxy
 
+allpt :: Proxy (All ToJSON)
+allpt = Proxy
+
 pf :: Proxy FromJSON
 pf = Proxy
+
+allpf :: Proxy (All FromJSON)
+allpf = Proxy
 
 pu :: Proxy UpdateFromJSON
 pu = Proxy

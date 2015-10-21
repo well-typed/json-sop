@@ -53,6 +53,7 @@ library
                        KindSignatures
                        DataKinds
                        FunctionalDependencies
+                       CPP
   if impl (ghc >= 7.8)
     default-extensions:  AutoDeriveTypeable
   other-extensions:    OverloadedStrings

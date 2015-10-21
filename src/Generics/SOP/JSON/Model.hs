@@ -1,4 +1,7 @@
-{-# LANGUAGE OverloadedStrings, OverlappingInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+#if __GLASGOW_HASKELL__ < 710
+{-# LANGUAGE OverlappingInstances #-}
+#endif
 module Generics.SOP.JSON.Model (
     JsonModel(..)
   , gjsonModel
@@ -36,7 +39,11 @@ instance JsonModel Text where
 instance JsonModel Text.Lazy.Text where
   jsonModel = Tagged $ String "String"
 
-instance JsonModel String where
+instance
+#if __GLASGOW_HASKELL__ >= 710
+  {-# OVERLAPPING #-}
+#endif
+  JsonModel String where
   jsonModel = Tagged $ String "String"
 
 instance JsonModel Int where
@@ -51,12 +58,20 @@ instance JsonModel Rational where
 instance JsonModel Bool where
   jsonModel = Tagged $ String "Bool"
 
-instance JsonModel a => JsonModel [a] where
+instance
+#if __GLASGOW_HASKELL__ >= 710
+  {-# OVERLAPPABLE #-}
+#endif
+  JsonModel a => JsonModel [a] where
   jsonModel = let model :: Tagged a Value
                   model = jsonModel
               in Tagged $ object [ "List" .= untag model ]
 
-instance JsonModel a => JsonModel (Maybe a) where
+instance
+#if __GLASGOW_HASKELL__ >= 710
+  {-# OVERLAPPABLE #-}
+#endif
+  JsonModel a => JsonModel (Maybe a) where
   jsonModel = let model :: Tagged a Value
                   model = jsonModel
               in Tagged $ Array $ Vector.fromList [ untag model, Null ]
@@ -68,12 +83,12 @@ instance JsonModel a => JsonModel (Maybe a) where
 -- | Generic computation of the JSON model
 --
 -- Do NOT use for recursive types, you will get an infinite model.
-gjsonModel :: forall a. (HasDatatypeInfo a, All2 JsonModel (Code a), SingI (Code a))
+gjsonModel :: forall a. (HasDatatypeInfo a, All2 JsonModel (Code a))
            => JsonOptions -> Tagged a Value
 gjsonModel opts = unproxy $ \pa -> gjsonModel' (jsonInfo pa opts)
 
-gjsonModel' :: (All2 JsonModel xss, SingI xss) => NP JsonInfo xss -> Value
-gjsonModel' = mkValue . hcollapse . hcliftA' p (K . constructorModel)
+gjsonModel' :: All2 JsonModel xss => NP JsonInfo xss -> Value
+gjsonModel' = mkValue . hcollapse . hcliftA allp (K . constructorModel)
   where
     -- In the case of a single-argument datatype, just return the type of
     -- the constructor, rather than a singleton list of types
@@ -89,7 +104,7 @@ constructorModel info@(JsonOne t) = tagModel t $
 constructorModel (JsonMultiple t) = tagModel t $
     object [ "Tuple" .= (tupleModel . hcollapse $ aux) ]
   where
-    aux :: (SingI xs, All JsonModel xs) => NP (K Value) xs
+    aux :: All JsonModel xs => NP (K Value) xs
     aux = hcpure p jsonModelK
 constructorModel (JsonRecord t fs) = tagModel t $
     object [ "Object" .= (objectModel . hcollapse . hcliftA p aux $ fs) ]
@@ -118,3 +133,6 @@ tagModel (Tag n) v = object [ "Object" .= object [ Text.pack n .= v ] ]
 
 p :: Proxy JsonModel
 p = Proxy
+
+allp :: Proxy (All JsonModel)
+allp = Proxy
