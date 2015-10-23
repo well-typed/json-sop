@@ -222,7 +222,7 @@ parseValues (JsonMultiple tag) =
     case fromList (map (\v -> (Nothing, v)) arr) of
       Just values -> return values
       Nothing     -> fail $ "Got " ++ show (length arr) ++ "values, "
-                         ++ "expected " ++ show (lengthSing (Proxy :: Proxy xs))
+                         ++ "expected " ++ show (lengthSList (Proxy :: Proxy xs))
 parseValues (JsonRecord tag fields) =
   untag tag $ withObject "Object" $ \obj -> do
     values <- hsequenceK =<< lineup fields obj
