@@ -158,7 +158,9 @@ gtoJSON' (JsonRecord tag fields) cs =
   . HashMap.fromList
   . hcollapse
   $ hcliftA2 pt (\(K field) (I a) -> K (Text.pack field, toJSON a)) fields cs
-gtoJSON' _ _ = error "unreachable"
+#if __GLASGOW_HASKELL__ < 800
+gtoJSON' _ _ = error "inaccessible"
+#endif
 
 {-------------------------------------------------------------------------------
   Decoder
@@ -310,7 +312,9 @@ gupdateFromJSON opts v = do
   case jsonInfo (Proxy :: Proxy a) opts of
     JsonRecord _ fields :* Nil -> gupdateRecord fields glenses v
     _ :* Nil -> error "cannot update non-record type"
+#if __GLASGOW_HASKELL__ < 800
     _        -> error "inaccessible"
+#endif
 
 gupdateRecord :: forall (xs :: [*]) (a :: *). All UpdateFromJSON xs
               => NP (K String) xs -> NP (GLens (->) (->) a) xs -> Value -> Parser (a -> a)
