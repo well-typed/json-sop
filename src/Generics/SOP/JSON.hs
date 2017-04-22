@@ -114,10 +114,10 @@ jsonInfoFor _    _ tag (Constructor n) =
     ShapeCons ShapeNil -> JsonOne      (tag n)
     _                  -> JsonMultiple (tag n)
 jsonInfoFor opts d tag (Record n fields) =
-    JsonRecord (tag n) (hliftA fieldName fields)
+    JsonRecord (tag n) (hliftA jfieldName fields)
   where
-    fieldName :: FieldInfo a -> K String a
-    fieldName (FieldInfo name) = K (jsonFieldName opts d name)
+    jfieldName :: FieldInfo a -> K String a
+    jfieldName (FieldInfo name) = K (jsonFieldName opts d name)
 
 jsonInfo :: forall a. (HasDatatypeInfo a, SListI (Code a))
          => Proxy a -> JsonOptions -> NP JsonInfo (Code a)
@@ -204,8 +204,8 @@ parseConstructor v info (Fn inj) = K $ do
     return $ SOP $ unK (inj prod)
   where
     aux :: FromJSON a => K (Maybe String, Value) a -> Parser a
-    aux (K (Just fieldName, val)) = modifyFailure (\str -> fieldName ++ ": " ++ str) $ parseJSON val
-    aux (K (Nothing,        val)) = parseJSON val
+    aux (K (Just fName, val)) = modifyFailure (\str -> fName ++ ": " ++ str) $ parseJSON val
+    aux (K (Nothing,    val)) = parseJSON val
 
 -- | Given information about a constructor, check if the given value has the
 -- right shape, and if so, return a product of (still encoded) values for
