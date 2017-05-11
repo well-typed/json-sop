@@ -15,6 +15,11 @@ module Generics.SOP.JSON (
     -- * Generic functions
   , gtoJSON
   , gparseJSON
+
+    -- * Typeclass agnostic Value generation
+  , ValueCallback(..)
+  , gtoValue
+
     -- * UpdateFromJSON and co
   , UpdateFromJSON(..)
   , gupdateFromJSON
@@ -30,6 +35,7 @@ import Control.Arrow (first)
 import Control.Monad
 import Data.Aeson (ToJSON(..), FromJSON(..), Value(..))
 import Data.Aeson.Types (Parser, modifyFailure)
+import Data.Constraint (Dict(..), Constraint, withDict)
 import Data.List (intercalate)
 import Data.Text (Text)
 import qualified Data.HashMap.Strict as HashMap
@@ -134,32 +140,50 @@ jsonInfo pa opts =
   Encoder
 -------------------------------------------------------------------------------}
 
+data ValueCallback (c :: * -> Constraint) =
+    ValueCallback (forall x . Dict (c x) -> x -> Value)
+
+gtoValue :: forall a c. (Generic a, HasDatatypeInfo a, All2 c (Code a))
+        => ValueCallback c -> JsonOptions -> a -> Value
+gtoValue vc opts a =
+  hcollapse $ hcliftA2 (Proxy :: Proxy (All c))
+    (gtoValue' vc) (jsonInfo (Proxy :: Proxy a) opts) (unSOP $ from a)
+
 gtoJSON :: forall a. (Generic a, HasDatatypeInfo a, All2 ToJSON (Code a))
         => JsonOptions -> a -> Value
-gtoJSON opts a =
-  hcollapse $ hcliftA2 allpt gtoJSON' (jsonInfo (Proxy :: Proxy a) opts)
-                                      (unSOP $ from a)
+gtoJSON = gtoValue toJSONCallback
 
-gtoJSON' :: All ToJSON xs => JsonInfo xs -> NP I xs -> K Value xs
-gtoJSON' (JsonZero n) Nil =
+toDict :: c a => proxy c -> a -> Dict (c a)
+toDict _ _ = Dict
+
+callback :: c a => ValueCallback c -> a -> Value
+callback v@(ValueCallback cb) a = cb (toDict v a) a
+
+toJSONCallback :: ValueCallback ToJSON
+toJSONCallback = ValueCallback $ \d x -> withDict d (toJSON x)
+
+gtoValue' :: forall c xs . All c xs
+    => ValueCallback c -> JsonInfo xs -> NP I xs -> K Value xs
+gtoValue' _ (JsonZero n) Nil =
     K $ String (Text.pack n)
-gtoJSON' (JsonOne tag) (I a :* Nil) =
-    tagValue tag (toJSON a)
-gtoJSON' (JsonMultiple tag) cs =
+gtoValue' vc (JsonOne tag) (I a :* Nil) =
+    tagValue tag (callback vc a)
+gtoValue' vc (JsonMultiple tag) cs =
     tagValue tag
   . Array
   . Vector.fromList
   . hcollapse
-  . hcliftA pt (K . toJSON . unI)
+  . hcliftA (Proxy :: Proxy c) (K . (callback vc) . unI)
   $ cs
-gtoJSON' (JsonRecord tag fields) cs =
+gtoValue' vc (JsonRecord tag fields) cs =
     tagValue tag
   . Object
   . HashMap.fromList
   . hcollapse
-  $ hcliftA2 pt (\(K field) (I a) -> K (Text.pack field, toJSON a)) fields cs
+  $ hcliftA2 (Proxy :: Proxy c) (\(K field) (I a)
+        -> K (Text.pack field, callback vc a)) fields cs
 #if __GLASGOW_HASKELL__ < 800
-gtoJSON' _ _ = error "inaccessible"
+gtoValue' _ _ _ = error "inaccessible"
 #endif
 
 {-------------------------------------------------------------------------------
@@ -372,12 +396,6 @@ tagValue (Tag t) v = K $ Object $ HashMap.fromList [(Text.pack t, v)]
 {-------------------------------------------------------------------------------
   Constraint proxies
 -------------------------------------------------------------------------------}
-
-pt :: Proxy ToJSON
-pt = Proxy
-
-allpt :: Proxy (All ToJSON)
-allpt = Proxy
 
 pf :: Proxy FromJSON
 pf = Proxy
