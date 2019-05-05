@@ -123,8 +123,15 @@ jsonInfo :: forall a. (HasDatatypeInfo a, SListI (Code a))
          => Proxy a -> JsonOptions -> NP JsonInfo (Code a)
 jsonInfo pa opts =
   case datatypeInfo pa of
-    Newtype _ _ _  -> JsonOne NoTag :* Nil
-    ADT     _ n cs -> hliftA (jsonInfoFor opts n (tag cs)) cs
+    Newtype {} -> JsonOne NoTag :* Nil
+    d @ ADT {} ->
+      hliftA
+        (jsonInfoFor
+          opts
+          (datatypeName d)
+          (tag (constructorInfo d))
+        )
+        (constructorInfo d)
   where
     tag :: NP ConstructorInfo (Code a) -> ConstructorName -> Tag
     tag cs | _ :* Nil <- cs = const NoTag
