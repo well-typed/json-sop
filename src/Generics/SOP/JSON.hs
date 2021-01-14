@@ -352,8 +352,13 @@ gupdateRecord fields lenses = withObject "Object" $ \obj -> do
 --
 -- The first form is useful when all fields of a record need to be present;
 -- the second when they are optional.
+#if MIN_VERSION_base(4,13,0)
+lineup :: (MonadFail m, MonadPlus m', MonadFail m', Eq a, Show a)
+       => NP (K a) xs -> [(a, b)] -> m (NP (K (m' b)) xs)
+#else
 lineup :: (Monad m, MonadPlus m', Eq a, Show a)
        => NP (K a) xs -> [(a, b)] -> m (NP (K (m' b)) xs)
+#endif
 lineup Nil []   = return Nil
 lineup Nil vals = fail $ "Unexpected key(s): " ++ show (map fst vals)
 lineup (K k :* ks) [] = do bs <- lineup ks [] ; return $ K (missingKey k) :* bs
@@ -363,7 +368,11 @@ lineup (K k :* ks) vs =
     Just ((_, b), vs') -> do bs <- lineup ks vs' ; return $ K (return b)     :* bs
 
 -- | Error message for a missing key (used in lineup)
+#if MIN_VERSION_base(4,13,0)
+missingKey :: (MonadFail m, Show a) => a -> m b
+#else
 missingKey :: (Monad m, Show a) => a -> m b
+#endif
 missingKey k = fail $ "missing key " ++ show k
 
 -- | Remove the first element that satisfies the predicate
@@ -399,19 +408,35 @@ pu = Proxy
   Adaptation of some of Aeson's combinators
 -------------------------------------------------------------------------------}
 
+#if MIN_VERSION_base(4,13,0)
+withObject :: MonadFail m => String -> ([(String, Value)] -> m a) -> Value -> m a
+#else
 withObject :: Monad m => String -> ([(String, Value)] -> m a) -> Value -> m a
+#endif
 withObject _        f (Object obj) = f $ map (first Text.unpack) (HashMap.toList obj)
 withObject expected _ v            = typeMismatch expected v
 
+#if MIN_VERSION_base(4,13,0)
+withText :: MonadFail m => String -> (Text -> m a) -> Value -> m a
+#else
 withText :: Monad m => String -> (Text -> m a) -> Value -> m a
+#endif
 withText _        f (String txt) = f txt
 withText expected _ v            = typeMismatch expected v
 
+#if MIN_VERSION_base(4,13,0)
+withArray :: MonadFail m => String -> ([Value] -> m a) -> Value -> m a
+#else
 withArray :: Monad m => String -> ([Value] -> m a) -> Value -> m a
+#endif
 withArray _         f (Array arr) = f $ Vector.toList arr
 withArray expected  _ v           = typeMismatch expected v
 
+#if MIN_VERSION_base(4,13,0)
+typeMismatch :: MonadFail m
+#else
 typeMismatch :: Monad m
+#endif
              => String -- ^ The name of the type you are trying to parse.
              -> Value  -- ^ The actual value encountered.
              -> m a
