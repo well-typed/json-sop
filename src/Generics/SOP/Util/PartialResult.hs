@@ -37,11 +37,18 @@ instance Functor f => Functor (Partial f) where
 
 instance Functor f => Monad (Partial f) where
   return = PZero
+#if !MIN_VERSION_base(4,13,0)
   fail   = Fail . return
+#endif
 
   Fail e   >>= _ = Fail e
   PZero a  >>= f = f a
   PSucc fa >>= f = PSucc (fmap (>>= f) fa)
+
+#if MIN_VERSION_base(4,13,0)
+instance Functor f => MonadFail (Partial f) where
+  fail = Fail . return
+#endif
 
 instance (MonadPlus f, Functor f) => MonadPlus (Partial f) where
   mzero = Fail []
@@ -72,5 +79,3 @@ runPartial failWith = go
     go (PZero a)  = return a
     go (PSucc fa) = fa >>= go
     go (Fail  es) = failWith es
-
-
