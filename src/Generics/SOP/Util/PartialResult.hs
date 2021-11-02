@@ -10,6 +10,7 @@ module Generics.SOP.Util.PartialResult (
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans.Class
+import Data.Kind
 
 -- | Repeat f zero or more times
 --
@@ -22,7 +23,7 @@ import Control.Monad.Trans.Class
 -- try any more parsers for other constructors even if the parser for T1
 -- now fails in parsing the arguments of T1. Instead, we want to give the
 -- error message about attempting to parse T1.
-data Partial (f :: * -> *) (a :: *) =
+data Partial (f :: Type -> Type) (a :: Type) =
     Fail [String]
   | PZero a
   | PSucc (f (Partial f a))
@@ -36,7 +37,7 @@ instance Functor f => Functor (Partial f) where
   fmap f (PSucc pa) = PSucc (fmap (fmap f) pa)
 
 instance Functor f => Monad (Partial f) where
-  return = PZero
+  return = pure
 #if !MIN_VERSION_base(4,13,0)
   fail   = Fail . return
 #endif
@@ -66,7 +67,7 @@ instance MonadTrans Partial where
   lift ma = PSucc (PZero `liftM` ma)
 
 instance Functor f => Applicative (Partial f) where
-  pure = return
+  pure = PZero
   f <*> a = do f' <- f ; a' <- a ; return (f' a')
 
 instance (MonadPlus f, Functor f) => Alternative (Partial f) where

@@ -11,6 +11,7 @@ module Generics.SOP.JSON.Model (
   ) where
 
 import Data.Aeson
+import Data.Kind
 import Data.Tagged
 import qualified Data.Text      as Text
 import qualified Data.Text.Lazy as Text.Lazy
@@ -23,7 +24,7 @@ import Generics.SOP.JSON
 import Data.Time (UTCTime)
 import Data.Text (Text)
 
-class JsonModel (a :: *) where
+class JsonModel (a :: Type) where
   jsonModel :: Tagged a Value
 
 {-------------------------------------------------------------------------------

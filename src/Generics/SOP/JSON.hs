@@ -30,6 +30,7 @@ import Control.Arrow (first)
 import Control.Monad
 import Data.Aeson (ToJSON(..), FromJSON(..), Value(..))
 import Data.Aeson.Types (Parser, modifyFailure)
+import Data.Kind
 import Data.List (intercalate)
 import Data.Text (Text)
 import qualified Data.HashMap.Strict as HashMap
@@ -83,7 +84,7 @@ defaultJsonOptions = JsonOptions {
 -- their constructor; but for a datatype with multiple constructors we do.
 data Tag = NoTag | Tag JsonTagName
 
-data JsonInfo :: [*] -> * where
+data JsonInfo :: [Type] -> Type where
   -- Constructor without arguments
   --
   -- In this we _just_ output the name of the constructor (as a string);
@@ -123,8 +124,8 @@ jsonInfo :: forall a. (HasDatatypeInfo a, SListI (Code a))
          => Proxy a -> JsonOptions -> NP JsonInfo (Code a)
 jsonInfo pa opts =
   case datatypeInfo pa of
-    Newtype {} -> JsonOne NoTag :* Nil
-    d @ ADT {} ->
+    Newtype{} -> JsonOne NoTag :* Nil
+    d@ADT{}   ->
       hliftA
         (jsonInfoFor
           opts
@@ -188,7 +189,7 @@ gparseJSON :: forall a. (Generic a, HasDatatypeInfo a, All2 FromJSON (Code a))
            => JsonOptions -> Value -> Parser a
 gparseJSON opts v = to `liftM` gparseJSON' v (jsonInfo (Proxy :: Proxy a) opts)
 
-gparseJSON' :: forall (xss :: [[*]]). All2 FromJSON xss
+gparseJSON' :: forall (xss :: [[Type]]). All2 FromJSON xss
    => Value -> NP JsonInfo xss -> Parser (SOP I xss)
 gparseJSON' v info = runPartial failWith
                    . msum
@@ -203,7 +204,7 @@ gparseJSON' v info = runPartial failWith
     injs :: NP (Injection (NP I) xss) xss
     injs = injections
 
-parseConstructor :: forall (xss :: [[*]]) (xs :: [*]). All FromJSON xs
+parseConstructor :: forall (xss :: [[Type]]) (xs :: [Type]). All FromJSON xs
                  => Value -> JsonInfo xs -> Injection (NP I) xss xs -> K (Partial Parser (SOP I xss)) xs
 parseConstructor v info (Fn inj) = K $ do
     vals <- parseValues info v
@@ -217,7 +218,7 @@ parseConstructor v info (Fn inj) = K $ do
 -- | Given information about a constructor, check if the given value has the
 -- right shape, and if so, return a product of (still encoded) values for
 -- each of the arguments of the constructor
-parseValues :: forall (xs :: [*]). SListI xs
+parseValues :: forall (xs :: [Type]). SListI xs
             => JsonInfo xs -> Value -> Partial Parser (NP (K (Maybe String, Value)) xs)
 parseValues (JsonZero n) =
   withText ("Expected literal " ++ show n) $ \txt -> do
@@ -323,7 +324,7 @@ gupdateFromJSON opts v = do
     _        -> error "inaccessible"
 #endif
 
-gupdateRecord :: forall (xs :: [*]) (a :: *). All UpdateFromJSON xs
+gupdateRecord :: forall (xs :: [Type]) (a :: Type). All UpdateFromJSON xs
               => NP (K String) xs -> NP (GLens (->) (->) a) xs -> Value -> Parser (a -> a)
 gupdateRecord fields lenses = withObject "Object" $ \obj -> do
     values :: NP (K (Maybe Value)) xs <- lineup fields obj
