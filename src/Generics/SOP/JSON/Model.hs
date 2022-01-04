@@ -1,7 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-#if __GLASGOW_HASKELL__ < 710
-{-# LANGUAGE OverlappingInstances #-}
-#endif
+
 module Generics.SOP.JSON.Model (
     JsonModel(..)
   , gjsonModel
@@ -11,7 +9,10 @@ module Generics.SOP.JSON.Model (
   ) where
 
 import Data.Aeson
+import Data.Kind
+import Data.String (fromString)
 import Data.Tagged
+
 import qualified Data.Text      as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Vector    as Vector
@@ -23,7 +24,7 @@ import Generics.SOP.JSON
 import Data.Time (UTCTime)
 import Data.Text (Text)
 
-class JsonModel (a :: *) where
+class JsonModel (a :: Type) where
   jsonModel :: Tagged a Value
 
 {-------------------------------------------------------------------------------
@@ -39,11 +40,7 @@ instance JsonModel Text where
 instance JsonModel Text.Lazy.Text where
   jsonModel = Tagged $ String "String"
 
-instance
-#if __GLASGOW_HASKELL__ >= 710
-  {-# OVERLAPPING #-}
-#endif
-  JsonModel String where
+instance {-# OVERLAPPING #-} JsonModel String where
   jsonModel = Tagged $ String "String"
 
 instance JsonModel Int where
@@ -58,20 +55,12 @@ instance JsonModel Rational where
 instance JsonModel Bool where
   jsonModel = Tagged $ String "Bool"
 
-instance
-#if __GLASGOW_HASKELL__ >= 710
-  {-# OVERLAPPABLE #-}
-#endif
-  JsonModel a => JsonModel [a] where
+instance {-# OVERLAPPABLE #-} JsonModel a => JsonModel [a] where
   jsonModel = let model :: Tagged a Value
                   model = jsonModel
               in Tagged $ object [ "List" .= untag model ]
 
-instance
-#if __GLASGOW_HASKELL__ >= 710
-  {-# OVERLAPPABLE #-}
-#endif
-  JsonModel a => JsonModel (Maybe a) where
+instance {-# OVERLAPPABLE #-} JsonModel a => JsonModel (Maybe a) where
   jsonModel = let model :: Tagged a Value
                   model = jsonModel
               in Tagged $ Array $ Vector.fromList [ untag model, Null ]
@@ -129,7 +118,7 @@ jsonModelK = K $ untag (jsonModel :: Tagged a Value)
 
 tagModel :: Tag -> Value -> Value
 tagModel NoTag   v = v
-tagModel (Tag n) v = object [ "Object" .= object [ Text.pack n .= v ] ]
+tagModel (Tag n) v = object [ "Object" .= object [ fromString n .= v ] ]
 
 p :: Proxy JsonModel
 p = Proxy

@@ -1,7 +1,5 @@
 {-# LANGUAGE PolyKinds #-}
-#if __GLASGOW_HASKELL__ < 710
-{-# LANGUAGE OverlappingInstances #-}
-#endif
+
 module Generics.SOP.JSON (
     -- * Configuration
     JsonFieldName
@@ -28,13 +26,22 @@ module Generics.SOP.JSON (
 
 import Control.Arrow (first)
 import Control.Monad
-import Data.Aeson (ToJSON(..), FromJSON(..), Value(..))
+import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), object, (.=))
 import Data.Aeson.Types (Parser, modifyFailure)
+import Data.Kind
 import Data.List (intercalate)
+import Data.String (fromString)
 import Data.Text (Text)
+
+import qualified Data.Text   as Text
+import qualified Data.Vector as Vector
+
+#if MIN_VERSION_aeson(2,0,0)
+import qualified Data.Aeson.Key      as Key
+import qualified Data.Aeson.KeyMap   as KeyMap
+#else
 import qualified Data.HashMap.Strict as HashMap
-import qualified Data.Text           as Text
-import qualified Data.Vector         as Vector
+#endif
 
 import Generics.SOP
 import Generics.SOP.Lens
@@ -83,7 +90,7 @@ defaultJsonOptions = JsonOptions {
 -- their constructor; but for a datatype with multiple constructors we do.
 data Tag = NoTag | Tag JsonTagName
 
-data JsonInfo :: [*] -> * where
+data JsonInfo :: [Type] -> Type where
   -- Constructor without arguments
   --
   -- In this we _just_ output the name of the constructor (as a string);
@@ -124,7 +131,7 @@ jsonInfo :: forall a. (HasDatatypeInfo a, SListI (Code a))
 jsonInfo pa opts =
   case datatypeInfo pa of
     Newtype {} -> JsonOne NoTag :* Nil
-    d @ ADT {} ->
+    d@ADT {} ->
       hliftA
         (jsonInfoFor
           opts
@@ -161,13 +168,9 @@ gtoJSON' (JsonMultiple tag) cs =
   $ cs
 gtoJSON' (JsonRecord tag fields) cs =
     tagValue tag
-  . Object
-  . HashMap.fromList
+  . object
   . hcollapse
-  $ hcliftA2 pt (\(K field) (I a) -> K (Text.pack field, toJSON a)) fields cs
-#if __GLASGOW_HASKELL__ < 800
-gtoJSON' _ _ = error "inaccessible"
-#endif
+  $ hcliftA2 pt (\(K field) (I a) -> K (fromString field .= a)) fields cs
 
 {-------------------------------------------------------------------------------
   Decoder
@@ -188,7 +191,7 @@ gparseJSON :: forall a. (Generic a, HasDatatypeInfo a, All2 FromJSON (Code a))
            => JsonOptions -> Value -> Parser a
 gparseJSON opts v = to `liftM` gparseJSON' v (jsonInfo (Proxy :: Proxy a) opts)
 
-gparseJSON' :: forall (xss :: [[*]]). All2 FromJSON xss
+gparseJSON' :: forall (xss :: [[Type]]). All2 FromJSON xss
    => Value -> NP JsonInfo xss -> Parser (SOP I xss)
 gparseJSON' v info = runPartial failWith
                    . msum
@@ -203,7 +206,7 @@ gparseJSON' v info = runPartial failWith
     injs :: NP (Injection (NP I) xss) xss
     injs = injections
 
-parseConstructor :: forall (xss :: [[*]]) (xs :: [*]). All FromJSON xs
+parseConstructor :: forall (xss :: [[Type]]) (xs :: [Type]). All FromJSON xs
                  => Value -> JsonInfo xs -> Injection (NP I) xss xs -> K (Partial Parser (SOP I xss)) xs
 parseConstructor v info (Fn inj) = K $ do
     vals <- parseValues info v
@@ -217,7 +220,7 @@ parseConstructor v info (Fn inj) = K $ do
 -- | Given information about a constructor, check if the given value has the
 -- right shape, and if so, return a product of (still encoded) values for
 -- each of the arguments of the constructor
-parseValues :: forall (xs :: [*]). SListI xs
+parseValues :: forall (xs :: [Type]). SListI xs
             => JsonInfo xs -> Value -> Partial Parser (NP (K (Maybe String, Value)) xs)
 parseValues (JsonZero n) =
   withText ("Expected literal " ++ show n) $ \txt -> do
@@ -284,16 +287,11 @@ replaceWithJSON v = parseJSON v >>= \new -> return $ \_old -> new
 parseWith :: UpdateFromJSON a => a -> Value -> Parser a
 parseWith a = liftM ($ a) . updateFromJSON
 
-instance
-#if __GLASGOW_HASKELL__ >= 710
-  {-# OVERLAPPABLE #-}
-#endif
-  FromJSON a => UpdateFromJSON [a]       where updateFromJSON = replaceWithJSON
-instance
-#if __GLASGOW_HASKELL__ >= 710
-  {-# OVERLAPPABLE #-}
-#endif
-  FromJSON a => UpdateFromJSON (Maybe a) where updateFromJSON = replaceWithJSON
+instance {-# OVERLAPPABLE #-} FromJSON a => UpdateFromJSON [a]
+  where updateFromJSON = replaceWithJSON
+
+instance {-# OVERLAPPABLE #-} FromJSON a => UpdateFromJSON (Maybe a)
+  where updateFromJSON = replaceWithJSON
 
 -- Primitive types we can only replace whole
 instance UpdateFromJSON Int      where updateFromJSON = replaceWithJSON
@@ -301,11 +299,9 @@ instance UpdateFromJSON Double   where updateFromJSON = replaceWithJSON
 instance UpdateFromJSON Rational where updateFromJSON = replaceWithJSON
 instance UpdateFromJSON Bool     where updateFromJSON = replaceWithJSON
 instance UpdateFromJSON Text     where updateFromJSON = replaceWithJSON
-instance
-#if __GLASGOW_HASKELL__ >= 710
-  {-# OVERLAPPING #-}
-#endif
-  UpdateFromJSON String   where updateFromJSON = replaceWithJSON
+
+instance {-# OVERLAPPING #-} UpdateFromJSON String
+  where updateFromJSON = replaceWithJSON
 
 {-------------------------------------------------------------------------------
   Generic instance for UpdateFromJSON
@@ -319,11 +315,8 @@ gupdateFromJSON opts v = do
   case jsonInfo (Proxy :: Proxy a) opts of
     JsonRecord _ fields :* Nil -> gupdateRecord fields glenses v
     _ :* Nil -> error "cannot update non-record type"
-#if __GLASGOW_HASKELL__ < 800
-    _        -> error "inaccessible"
-#endif
 
-gupdateRecord :: forall (xs :: [*]) (a :: *). All UpdateFromJSON xs
+gupdateRecord :: forall (xs :: [Type]) (a :: Type). All UpdateFromJSON xs
               => NP (K String) xs -> NP (GLens (->) (->) a) xs -> Value -> Parser (a -> a)
 gupdateRecord fields lenses = withObject "Object" $ \obj -> do
     values :: NP (K (Maybe Value)) xs <- lineup fields obj
@@ -383,7 +376,7 @@ remove f (x:xs) | f x       = Just (x, xs)
 
 tagValue :: Tag -> Value -> K Value a
 tagValue NoTag   v = K v
-tagValue (Tag t) v = K $ Object $ HashMap.fromList [(Text.pack t, v)]
+tagValue (Tag t) v = K $ object $ [fromString t .= v]
 
 {-------------------------------------------------------------------------------
   Constraint proxies
@@ -413,7 +406,11 @@ withObject :: MonadFail m => String -> ([(String, Value)] -> m a) -> Value -> m 
 #else
 withObject :: Monad m => String -> ([(String, Value)] -> m a) -> Value -> m a
 #endif
+#if MIN_VERSION_aeson(2,0,0)
+withObject _        f (Object obj) = f $ map (first Key.toString) (KeyMap.toList obj)
+#else
 withObject _        f (Object obj) = f $ map (first Text.unpack) (HashMap.toList obj)
+#endif
 withObject expected _ v            = typeMismatch expected v
 
 #if MIN_VERSION_base(4,13,0)
