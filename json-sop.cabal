@@ -1,5 +1,5 @@
 name:                json-sop
-version:             0.2.0.5
+version:             0.2.1
 synopsis:            Generics JSON (de)serialization using generics-sop
 description:
   This library contains generic serialization and deserialization functions
