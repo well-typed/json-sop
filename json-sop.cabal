@@ -1,5 +1,5 @@
 name:                json-sop
-version:             0.2.1
+version:             0.2.2
 synopsis:            Generics JSON (de)serialization using generics-sop
 description:
   This library contains generic serialization and deserialization functions
@@ -13,7 +13,7 @@ maintainer:          andres@well-typed.com
 category:            Generics
 build-type:          Simple
 cabal-version:       >=1.10
-tested-with:         GHC ==8.4.4 || ==8.6.5 || ==8.8.4 || ==8.10.7 || ==9.0.1 || ==9.2.1
+tested-with:         GHC ==8.8.4 || ==8.10.7 || ==9.0.2 || ==9.2.5 || ==9.4.4
 
 source-repository head
   type:                git
@@ -23,16 +23,18 @@ library
   exposed-modules:     Generics.SOP.JSON
                        Generics.SOP.JSON.Model
   other-modules:       Generics.SOP.Util.PartialResult
-  build-depends:       base                 >= 4.11  && < 4.17,
+  build-depends:       base                 >= 4.11  && < 4.18,
                        generics-sop         >= 0.2.3 && < 0.6,
-                       lens-sop             >= 0.2   && < 0.3,
+
+                       -- lens-sop changed API in 0.3
+                       lens-sop             >= 0.3   && < 0.4,
                        tagged               >= 0.7   && < 0.9,
                        aeson                >= 1.4   && < 2.2,
                        vector               >= 0.10  && < 0.14,
-                       text                 >= 1.1   && < 1.3,
+                       text                 >= 1.1   && < 2.1,
                        unordered-containers >= 0.2   && < 0.3,
-                       time                 >= 1.4   && < 1.12,
-                       transformers         >= 0.3   && < 0.6
+                       time                 >= 1.4   && < 1.14,
+                       transformers         >= 0.3   && < 0.7
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wall
