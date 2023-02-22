@@ -317,17 +317,17 @@ gupdateFromJSON opts v = do
     _ :* Nil -> error "cannot update non-record type"
 
 gupdateRecord :: forall (xs :: [Type]) (a :: Type). All UpdateFromJSON xs
-              => NP (K String) xs -> NP (GLens (->) (->) a) xs -> Value -> Parser (a -> a)
+              => NP (K String) xs -> NP (GLens I I a) xs -> Value -> Parser (a -> a)
 gupdateRecord fields lenses = withObject "Object" $ \obj -> do
     values :: NP (K (Maybe Value)) xs <- lineup fields obj
     updates <- hcollapse `liftM` hsequenceK (hcliftA2 pu update values lenses)
     return $ foldr (.) id updates
   where
     update :: forall b. UpdateFromJSON b
-           => K (Maybe Value) b -> GLens (->) (->) a b -> K (Parser (a -> a)) b
+           => K (Maybe Value) b -> GLens I I a b -> K (Parser (a -> a)) b
     update (K Nothing)  _ = K $ return id
     update (K (Just v)) l = K $ do f <- updateFromJSON v
-                                   return $ \a -> modify l (f, a)
+                                   return $ \a -> unI $ modify l (I . f) a
 
 {-------------------------------------------------------------------------------
   Auxiliary
