@@ -23,17 +23,17 @@ library
   exposed-modules:     Generics.SOP.JSON
                        Generics.SOP.JSON.Model
   other-modules:       Generics.SOP.Util.PartialResult
-  build-depends:       base                 >= 4.11  && < 4.19,
+  build-depends:       base                 >= 4.11  && < 4.21,
                        generics-sop         >= 0.2.3 && < 0.6,
 
                        -- lens-sop changed API in 0.3
                        lens-sop             >= 0.3   && < 0.4,
                        tagged               >= 0.7   && < 0.9,
-                       aeson                >= 1.4   && < 2.2,
+                       aeson                >= 1.4   && < 2.3,
                        vector               >= 0.10  && < 0.14,
-                       text                 >= 1.1   && < 2.1,
+                       text                 >= 1.1   && < 2.2,
                        unordered-containers >= 0.2   && < 0.3,
-                       time                 >= 1.4   && < 1.14,
+                       time                 >= 1.4   && < 1.15,
                        transformers         >= 0.3   && < 0.7
   hs-source-dirs:      src
   default-language:    Haskell2010
